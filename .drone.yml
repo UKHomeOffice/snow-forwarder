@@ -3,8 +3,8 @@ pipeline:
   build:
     image: golang:alpine
     commands:
-      - apk --no-cache add git
-      - GOARCH=amd64 GOOS=linux go build ./...
+      - cd listener && GOARCH=amd64 GOOS=linux go build -o bin/listener . && ls -lah bin
+      - cd ../notifier && GOARCH=amd64 GOOS=linux go build -o bin/notifier . && ls -lah bin
     when:
       event: 
         - push
@@ -15,3 +15,5 @@ pipeline:
     when:
       event:
         - pull_request
+      branch:
+        - master
