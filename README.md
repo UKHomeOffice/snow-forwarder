@@ -1,5 +1,5 @@
-# acp-lambda-snow-forwarder
+[![Go Report Card](https://goreportcard.com/badge/github.com/UKHomeOffice/snow-forwarder)](https://goreportcard.com/report/github.com/UKHomeOffice/snow-forwarder)
 
-Two AWS Lambda functions that forward change notifications from ACP Service Desk to SNOW
+# snow-forwarder
 
-![flowchart](lambdas.png)
+AWS Lambda functions that forward change notifications from ACP Service Desk to SNOW

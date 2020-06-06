@@ -1,4 +1,4 @@
-package main
+package notifier
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 )
 
 // Notify calls SNOW API and returns internal_identifier to Handler
-func (m *msg) Notify() (string, error) {
+func (m *Message) Notify() (string, error) {
 
 	mb, err := json.Marshal(m)
 	if err != nil {
@@ -24,6 +24,14 @@ func (m *msg) Notify() (string, error) {
 
 	// put payload bytes in reader and construct request
 	mbr := bytes.NewReader(mb)
+
+	vars := []string{"SNOW_USERNAME", "SNOW_PASSWORD", "SNOW_URL"}
+	for _, v := range vars {
+		_, ok := os.LookupEnv(v)
+		if !ok {
+			return "", errors.New("missing environment variable")
+		}
+	}
 
 	user := os.Getenv("SNOW_USERNAME")
 	pass := os.Getenv("SNOW_PASSWORD")
@@ -52,7 +60,7 @@ func (m *msg) Notify() (string, error) {
 
 	log.Printf("sent request, SNOW replied with: %v", string(body))
 
-	// dynamicallly decode SNOW response
+	// dynamically decode SNOW response
 	var dat map[string]interface{}
 	err = json.Unmarshal(body, &dat)
 	if err != nil {

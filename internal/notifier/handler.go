@@ -1,17 +1,13 @@
-package main
+package notifier
 
 import (
-	"context"
 	"log"
-	"os"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
-type pld struct {
+// Payload is the message body
+type Payload struct {
 	SupplierRef string `json:"supplierRef"`
 	Status      string `json:"status"`
 	Title       string `json:"title"`
@@ -21,20 +17,24 @@ type pld struct {
 	Success     bool   `json:"success,omitempty"`
 }
 
-type msg struct {
+// Message represents a change event
+type Message struct {
 	MessageID string `json:"messageid"`
 	IntID     string `json:"internal_identifier,omitempty"`
-	Payload   pld    `json:"payload"`
+
+	Payload `json:"payload"`
 }
 
-type res struct {
+// Response is returned from SNOW
+type Response struct {
 	SupplierRef string `json:"supplierRef"`
 	IntIdent    string `json:"internal_identifier"`
 }
 
-func (p *pld) SetMsg(record *events.DynamoDBEventRecord) (*msg, error) {
+// SetMsg adds a message header
+func (p *Payload) SetMsg(record *events.DynamoDBEventRecord) (*Message, error) {
 
-	var m msg
+	var m Message
 
 	// ignore remove events
 	if record.EventName == "REMOVE" {
@@ -46,14 +46,14 @@ func (p *pld) SetMsg(record *events.DynamoDBEventRecord) (*msg, error) {
 	// construct payloads
 	if record.Change.NewImage["status"].String() == "In Progress" || record.Change.NewImage["status"].String() == "Completed" {
 		p.Success = true
-		m = msg{
+		m = Message{
 			MessageID: "HO_SIAM_IN_REST_CHG_UPDATE_JSON",
 			IntID:     record.Change.NewImage["internal_identifier"].String(),
 			Payload:   *p,
 		}
 		return &m, nil
 	} else if record.EventName == "INSERT" && record.Change.NewImage["status"].String() == "Scheduled" {
-		m = msg{
+		m = Message{
 			MessageID: "HO_SIAM_IN_REST_CHG_POST_JSON",
 			Payload:   *p,
 		}
@@ -64,13 +64,13 @@ func (p *pld) SetMsg(record *events.DynamoDBEventRecord) (*msg, error) {
 	}
 }
 
-// Handler receives a DynamaDB stream and calls Notify and UpdateRec
-func Handler(ctx context.Context, e events.DynamoDBEvent) error {
+// Handler receives a DynamoDB stream and forwards the message on to SNOW
+func Handler(e events.DynamoDBEvent) error {
 
 	for _, record := range e.Records {
 
 		// get relevant values from stream event
-		p := pld{
+		p := Payload{
 			SupplierRef: record.Change.NewImage["supplierRef"].String(),
 			Status:      record.Change.NewImage["status"].String(),
 			Title:       record.Change.NewImage["title"].String(),
@@ -89,7 +89,7 @@ func Handler(ctx context.Context, e events.DynamoDBEvent) error {
 			return nil
 		}
 
-		// call Notify and expect internal_identifer in return
+		// call SNOW and expect internal_identifer in return
 		intid, err := m.Notify()
 		if err != nil {
 			log.Printf("could not call notify: %v", err)
@@ -101,27 +101,19 @@ func Handler(ctx context.Context, e events.DynamoDBEvent) error {
 			return nil
 		}
 
-		// configure session
-		reg := os.Getenv("REGION")
-
-		awsConfig := aws.Config{
-			Region: aws.String(reg),
-		}
-
-		sess := session.Must(session.NewSessionWithOptions(session.Options{
-			SharedConfigState: session.SharedConfigEnable,
-			Config:            awsConfig,
-		}))
-
-		svc := dynamodb.New(sess, aws.NewConfig())
-
 		// add internal_identifier to db record
-		ur := res{
+		ur := Response{
 			SupplierRef: p.SupplierRef,
 			IntIdent:    intid,
 		}
 
-		err = ur.AddIntID(svc)
+		db, err := newDB()
+		if err != nil {
+			log.Printf("could not create db session: %v", err)
+			return err
+		}
+
+		_, err = db.AddID(&ur)
 		if err != nil {
 			log.Printf("could not update db with internal identifier: %v", err)
 			return err
