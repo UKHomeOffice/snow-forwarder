@@ -1,25 +1,32 @@
-pipeline:
+---
+kind: pipeline
+name: default
+type: kubernetes
 
-  test:
-    image: golang:1.14
-    commands: 
-      - cd internal/listener/ && go test -v -coverprofile=listener_coverage.out -json > listener_tests.out && tail -4 listener_tests.out
-      - cd ../notifier/ && go test -v -coverprofile=notifier_coverage.out -json > notifier_tests.out && tail -4 notifier_tests.out
-    when:
-      event:
-        - [push, pull_request]
+platform:
+  os: linux
+  arch: amd64
 
-  build:
-    image: golang:1.14
-    commands:
-      - GOARCH=amd64 GOOS=linux go build -o internal/listener/bin/listener internal/listener/cmd/listener.go && ls -lah internal/listener/bin
-      - GOARCH=amd64 GOOS=linux go build -o internal/notifier/bin/notifier internal/notifier/cmd/notifier.go && ls -lah internal/notifier/bin
-    when:
-      event:
-        - [push, pull_request]
+steps:
+- name: test
+  pull: if-not-exists
+  image: golang:1.14
+  commands:
+  - cd internal/listener/ && go test -v -coverprofile=listener_coverage.out -json > listener_tests.out && tail -4 listener_tests.out
+  - cd ../notifier/ && go test -v -coverprofile=notifier_coverage.out -json > notifier_tests.out && tail -4 notifier_tests.out
 
-  sonar-scan:
-    image: quay.io/ukhomeofficedigital/sonar-scanner:v4.3.0
-    when:
-      event:
-        - pull_request
+- name: build
+  pull: if-not-exists
+  image: golang:1.14
+  commands:
+  - GOARCH=amd64 GOOS=linux go build -o internal/listener/bin/listener internal/listener/cmd/listener.go && ls -lah internal/listener/bin
+  - GOARCH=amd64 GOOS=linux go build -o internal/notifier/bin/notifier internal/notifier/cmd/notifier.go && ls -lah internal/notifier/bin
+
+- name: sonar-scan
+  pull: if-not-exists
+  image: quay.io/ukhomeofficedigital/sonar-scanner:v4.3.0
+  when:
+    event:
+    - pull_request
+
+...
