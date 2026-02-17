@@ -14,7 +14,7 @@ type Payload struct {
 	Description string `json:"description"`
 	StartTime   string `json:"startTime"`
 	EndTime     string `json:"endTime"`
-	Success     bool   `json:"success,omitempty"`
+	Success     string `json:"success,omitempty"`
 }
 
 // Message represents a change event
@@ -45,7 +45,7 @@ func (p *Payload) SetMsg(record *events.DynamoDBEventRecord) (*Message, error) {
 
 	// construct payloads
 	if record.Change.NewImage["status"].String() == "In Progress" || record.Change.NewImage["status"].String() == "Completed" {
-		p.Success = true
+		p.Success = "true"
 		m = Message{
 			MessageID: "HO_SIAM_IN_REST_CHG_UPDATE_JSON",
 			IntID:     record.Change.NewImage["internal_identifier"].String(),

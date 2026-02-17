@@ -67,8 +67,16 @@ func (m *Message) Notify() (string, error) {
 		return "", err
 	}
 
+	// check for error response from SNOW
+	if _, hasErr := dat["error"]; hasErr {
+		return "", errors.New("SNOW returned error: " + string(body))
+	}
+
 	// check for internal_identifier
-	rts := dat["result"].(map[string]interface{})
+	rts, ok := dat["result"].(map[string]interface{})
+	if !ok {
+		return "", errors.New("unexpected SNOW response format: " + string(body))
+	}
 	ini := rts["internal_identifier"].(string)
 	if ini == "" {
 		return ini, errors.New("request failed, SNOW did not return a Change ID")
