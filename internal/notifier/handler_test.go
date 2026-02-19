@@ -9,14 +9,16 @@ import (
 func TestSetMsg(t *testing.T) {
 
 	tt := []struct {
-		name   string
-		event  string
-		status string
-		expect string
+		name          string
+		event         string
+		status        string
+		expect        string
+		expectSuccess string
 	}{
-		{name: "create", event: "INSERT", status: "Scheduled", expect: "HO_SIAM_IN_REST_CHG_POST_JSON"},
-		{name: "update", event: "MODIFY", status: "In Progress", expect: "HO_SIAM_IN_REST_CHG_UPDATE_JSON"},
-		{name: "delete", event: "REMOVE", expect: ""},
+		{name: "create", event: "INSERT", status: "Scheduled", expect: "HO_SIAM_IN_REST_CHG_POST_JSON", expectSuccess: ""},
+		{name: "update", event: "MODIFY", status: "In Progress", expect: "HO_SIAM_IN_REST_CHG_UPDATE_JSON", expectSuccess: "true"},
+		{name: "complete", event: "MODIFY", status: "Completed", expect: "HO_SIAM_IN_REST_CHG_UPDATE_JSON", expectSuccess: "true"},
+		{name: "delete", event: "REMOVE", expect: "", expectSuccess: ""},
 	}
 
 	for _, tc := range tt {
@@ -42,8 +44,11 @@ func TestSetMsg(t *testing.T) {
 			}
 
 			if msg.MessageID != tc.expect {
-				t.Errorf("expected %v, got %v", tc.expect, msg.MessageID)
+				t.Errorf("expected MessageID %v, got %v", tc.expect, msg.MessageID)
+			}
 
+			if msg.Success != tc.expectSuccess {
+				t.Errorf("expected Success %q, got %q", tc.expectSuccess, msg.Success)
 			}
 		})
 	}
