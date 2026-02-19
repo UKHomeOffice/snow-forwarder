@@ -77,13 +77,16 @@ func (m *Message) Notify() (string, error) {
 	if !ok {
 		return "", errors.New("unexpected SNOW response format: " + string(body))
 	}
-	ini := rts["internal_identifier"].(string)
-	if ini == "" {
-		return ini, errors.New("request failed, SNOW did not return a Change ID")
+	ini, ok := rts["internal_identifier"].(string)
+	if !ok || ini == "" {
+		return "", errors.New("unexpected or missing internal_identifier in SNOW response: " + string(body))
 	}
 
 	// check for response type
-	rlg := rts["log"].(string)
+	rlg, ok := rts["log"].(string)
+	if !ok {
+		return "", errors.New("could not parse SNOW response log: " + string(body))
+	}
 
 	if strings.Contains(rlg, "Inserting") {
 		log.Printf("SNOW replied with new Change ID: %v", ini)
