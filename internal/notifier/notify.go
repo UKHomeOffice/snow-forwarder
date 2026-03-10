@@ -10,7 +10,67 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ssm"
 )
+
+// cached credentials from SSM (loaded once per cold start)
+var snowUser string
+var snowPass string
+
+func getSSMParameter(svc *ssm.SSM, name string) (string, error) {
+	input := &ssm.GetParameterInput{
+		Name:           aws.String(name),
+		WithDecryption: aws.Bool(true),
+	}
+	result, err := svc.GetParameter(input)
+	if err != nil {
+		return "", err
+	}
+	return *result.Parameter.Value, nil
+}
+
+func loadCredentials() error {
+	if snowUser != "" && snowPass != "" {
+		return nil
+	}
+
+	region := os.Getenv("REGION")
+	if region == "" {
+		region = "eu-west-2"
+	}
+
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(region),
+	})
+	if err != nil {
+		return err
+	}
+
+	svc := ssm.New(sess)
+
+	userParam := os.Getenv("SSM_SNOW_USERNAME")
+	passParam := os.Getenv("SSM_SNOW_PASSWORD")
+
+	if userParam == "" || passParam == "" {
+		return errors.New("missing SSM parameter path environment variables")
+	}
+
+	snowUser, err = getSSMParameter(svc, userParam)
+	if err != nil {
+		return err
+	}
+
+	snowPass, err = getSSMParameter(svc, passParam)
+	if err != nil {
+		return err
+	}
+
+	log.Println("SNOW credentials loaded from SSM Parameter Store")
+	return nil
+}
 
 // Notify calls SNOW API and returns internal_identifier to Handler
 func (m *Message) Notify() (string, error) {
@@ -25,16 +85,15 @@ func (m *Message) Notify() (string, error) {
 	// put payload bytes in reader and construct request
 	mbr := bytes.NewReader(mb)
 
-	vars := []string{"SNOW_USERNAME", "SNOW_PASSWORD", "SNOW_URL"}
-	for _, v := range vars {
-		_, ok := os.LookupEnv(v)
-		if !ok {
-			return "", errors.New("missing environment variable")
-		}
+	// load credentials from SSM
+	if err := loadCredentials(); err != nil {
+		return "", err
 	}
 
-	user := os.Getenv("SNOW_USERNAME")
-	pass := os.Getenv("SNOW_PASSWORD")
+	_, ok := os.LookupEnv("SNOW_URL")
+	if !ok {
+		return "", errors.New("missing environment variable SNOW_URL")
+	}
 
 	u, err := url.Parse(os.Getenv("SNOW_URL"))
 	if err != nil {
@@ -46,7 +105,7 @@ func (m *Message) Notify() (string, error) {
 		return "", err
 	}
 
-	req.SetBasicAuth(user, pass)
+	req.SetBasicAuth(snowUser, snowPass)
 	req.Header.Set("Content-Type", "application/json")
 
 	// call SNOW and log full response
